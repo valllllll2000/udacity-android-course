@@ -1,2 +1,2 @@
 # udacity-android-course
-Classwork for Udacity course
+Classwork and exercices for Udacity course 
