@@ -18,6 +18,7 @@ import com.example.android.sunshine.app.data.WeatherConstants;
 public class ForecastAdapter extends CursorAdapter {
     private static final int VIEW_TYPE_TODAY = 0;
     private static final int VIEW_TYPE_FUTURE_DAY = 1;
+    private boolean mUseTodayLayout = false;
 
     public ForecastAdapter(Context context, Cursor c, int flags) {
         super(context, c, flags);
@@ -38,7 +39,7 @@ public class ForecastAdapter extends CursorAdapter {
 
     @Override
     public int getItemViewType(int position) {
-        return (position == 0) ? VIEW_TYPE_TODAY : VIEW_TYPE_FUTURE_DAY;
+        return (position == 0 && mUseTodayLayout) ? VIEW_TYPE_TODAY : VIEW_TYPE_FUTURE_DAY;
     }
 
     @Override
@@ -53,8 +54,9 @@ public class ForecastAdapter extends CursorAdapter {
     public void bindView(View view, Context context, Cursor cursor) {
         // our view is pretty simple here --- just a text view
         // we'll keep the UI functional with a simple (and slow!) binding.
+        int viewType = getItemViewType(cursor.getPosition());
         ViewHolder holder = (ViewHolder) view.getTag();
-        holder.iconView.setImageResource(R.mipmap.ic_launcher);
+        holder.iconView.setImageResource(Utility.getResourseFromWeatherId(cursor.getInt(WeatherConstants.COL_WEATHER_CONDITION_ID), viewType));
         holder.dateView.setText(
                 Utility.getFriendlyDayString(context, cursor.getLong(WeatherConstants.COL_WEATHER_DATE)));
         holder.descriptionView.
@@ -64,6 +66,10 @@ public class ForecastAdapter extends CursorAdapter {
                 setText(Utility.formatTemperature(context, cursor.getDouble(WeatherConstants.COL_WEATHER_MAX_TEMP), metric));
        holder.lowTempView.
                 setText(Utility.formatTemperature(context, cursor.getDouble(WeatherConstants.COL_WEATHER_MIN_TEMP), metric));
+    }
+
+    public void setUseTodayLayout(boolean mUseTodayLayout) {
+        this.mUseTodayLayout = mUseTodayLayout;
     }
 
     public static class ViewHolder {

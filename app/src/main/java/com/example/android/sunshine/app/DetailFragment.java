@@ -1,5 +1,6 @@
 package com.example.android.sunshine.app;
 
+import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
@@ -18,9 +19,11 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.example.android.sunshine.app.data.WeatherConstants;
+import com.example.android.sunshine.app.data.WeatherContract;
 
 /**
  * A placeholder fragment containing a simple view.
@@ -30,10 +33,20 @@ public class DetailFragment extends Fragment implements LoaderManager.LoaderCall
 
     public static final String FORECAST_SHARE_HASHTAG = "#SunshineApp";
     private static final String TAG = DetailFragment.class.getSimpleName();
+    public static final String DATE_URI = "DATE_URI";
     private String weatherData;
     private static final int LOADER_ID = 1;
     private TextView detailTextview;
     private ShareActionProvider mShareActionProvider;
+    private TextView dateView;
+    private TextView descriptionView;
+    private TextView highTempView;
+    private TextView lowTempView;
+    private TextView humidityTextView;
+    private TextView windTextView;
+    private TextView pressureTextView;
+    private TextView mFriendlyDateView;
+    private Uri mUri;
 
     public DetailFragment() {
     }
@@ -67,7 +80,7 @@ public class DetailFragment extends Fragment implements LoaderManager.LoaderCall
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET);
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_TEXT, weatherData+ FORECAST_SHARE_HASHTAG);
+        intent.putExtra(Intent.EXTRA_TEXT, weatherData + FORECAST_SHARE_HASHTAG);
         return intent;
     }
 
@@ -75,7 +88,19 @@ public class DetailFragment extends Fragment implements LoaderManager.LoaderCall
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_detail, container, false);
-        detailTextview = (TextView) rootView.findViewById(R.id.detail_text);
+
+        dateView = (TextView) rootView.findViewById(R.id.list_item_date_textview);
+        mFriendlyDateView = (TextView) rootView.findViewById(R.id.list_item_day_textview);
+        descriptionView = (TextView) rootView.findViewById(R.id.list_item_forecast_textview);
+        highTempView = (TextView) rootView.findViewById(R.id.list_item_high_textview);
+        lowTempView = (TextView) rootView.findViewById(R.id.list_item_low_textview);
+        humidityTextView = (TextView) rootView.findViewById(R.id.list_item_humidity);
+        windTextView = (TextView) rootView.findViewById(R.id.list_item_wind);
+        pressureTextView = (TextView) rootView.findViewById(R.id.list_item_pressure);
+        Bundle b = getArguments();
+        if(b != null){
+            mUri = b.getParcelable(DATE_URI);
+        }
         return rootView;
     }
 
@@ -87,27 +112,45 @@ public class DetailFragment extends Fragment implements LoaderManager.LoaderCall
 
     @Override
     public Loader<Cursor> onCreateLoader(int id, Bundle args) {
-        Intent intent = getActivity().getIntent();
-        if(intent == null){
+
+        if(null == mUri){
             return null;
         }
-        Uri weatherUri = intent.getData();
         return new CursorLoader(
                 getActivity(),
-                weatherUri,
-                WeatherConstants.FORECAST_COLUMNS,
+                mUri,
+                WeatherConstants.FORECAST_COLUMNS_DETAIL,
                 null,
                 null,
                 null);
     }
 
     @Override
-    public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-        if (data != null && data.moveToFirst()) {
-            weatherData = Utility.convertCursorRowToUXFormat(data, getActivity());
-            if(weatherData != null){
-                detailTextview.setText(weatherData);
-            }
+    public void onLoadFinished(Loader<Cursor> loader, Cursor cursor) {
+        if (cursor != null && cursor.moveToFirst()) {
+            View view = getView();
+            ImageView iconView = (ImageView) view.findViewById(R.id.list_item_icon);
+            iconView.setImageResource(Utility.getResourseFromWeatherId(cursor.getInt(WeatherConstants.COL_WEATHER_CONDITION_ID), 0));
+            Context context = getActivity();
+            long date = cursor.getLong(WeatherConstants.COL_WEATHER_DATE);
+            String friendlyDateText = Utility.getDayName(getActivity(), date);
+            String dateText = Utility.getFormattedMonthDay(getActivity(), date);
+            mFriendlyDateView.setText(friendlyDateText);
+            dateView.setText(dateText);
+            descriptionView.
+                    setText(cursor.getString(WeatherConstants.COL_WEATHER_DESC));
+            boolean metric = Utility.isMetric(context);
+            highTempView.
+                    setText(Utility.formatTemperature(context,
+                            cursor.getDouble(WeatherConstants.COL_WEATHER_MAX_TEMP), metric));
+            lowTempView.
+                    setText(Utility.formatTemperature(context,
+                            cursor.getDouble(WeatherConstants.COL_WEATHER_MIN_TEMP), metric));
+            humidityTextView.setText(Utility.formatHumidity(context, cursor.getDouble(WeatherConstants.COL_HUMIDITY)));
+            windTextView.setText(Utility.getFormattedWind(context, cursor.getFloat(WeatherConstants.COL_WIND),
+                    cursor.getFloat(WeatherConstants.COL_DEGREES)));
+            pressureTextView.setText(Utility.formatPressure(context, cursor.getDouble(WeatherConstants.COL_PRESSURE)));
+            weatherData = Utility.convertCursorRowToUXFormat(cursor, getActivity());
         }
     }
 
@@ -115,4 +158,28 @@ public class DetailFragment extends Fragment implements LoaderManager.LoaderCall
     public void onLoaderReset(Loader<Cursor> loader) {
 
     }
+
+    public void onLocationChanged(String newLocation) {
+        // replace the uri, since the location has changed
+        Uri uri = mUri;
+        if (null != uri) {
+            long date = WeatherContract.WeatherEntry.getDateFromUri(uri);
+            Uri updatedUri = WeatherContract.WeatherEntry.buildWeatherLocationWithDate(newLocation, date);
+            mUri = updatedUri;
+            getLoaderManager().restartLoader(LOADER_ID, null, this);
+        }
+    }
+
+    public static DetailFragment newInstance(Uri dateUri) {
+        DetailFragment df =  new DetailFragment();
+        Bundle bundle =  new Bundle();
+        bundle.putParcelable(DATE_URI, dateUri);
+        df.setArguments(bundle);
+        return df;
+    }
+
+//    public void updateUri(Uri dateUri) {
+//        mUri = dateUri;
+//        getLoaderManager().restartLoader(LOADER_ID, null, this);
+//    }
 }

@@ -1,6 +1,6 @@
 package com.example.android.sunshine.app;
 
-import android.content.Intent;
+import android.app.Activity;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
@@ -30,9 +30,14 @@ import com.example.android.sunshine.app.data.WeatherContract;
 public class ForecastFragment extends Fragment implements LoaderManager.LoaderCallbacks<Cursor> {
 
     protected static final String TAG = ForecastFragment.class.getSimpleName();
+    public static final String SELECTED_ITEM_POSITION = "selected_item_position";
     private ForecastAdapter mForecastAdapter;
     private static final int LOADER_ID = 0;
-
+    private Callback callback;
+    private int mPosition;
+    private ListView listView;
+    private int selectedItemPosition = ListView.INVALID_POSITION;
+    private boolean mUseTodayLayout;
 
     public ForecastFragment() {
     }
@@ -43,6 +48,15 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
         setHasOptionsMenu(true);
     }
 
+    @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+        if(activity instanceof  Callback){
+            callback = (Callback)activity;
+        } else {
+            throw new IllegalArgumentException("Activity must implement Callback");
+        }
+    }
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
@@ -75,23 +89,26 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
                              Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_main, container, false);
         mForecastAdapter = new ForecastAdapter(getActivity(), null, 0);
-        ListView lv = (ListView) rootView.findViewById(R.id.listView_forecast);
-        lv.setAdapter(mForecastAdapter);
-        lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        mForecastAdapter.setUseTodayLayout(mUseTodayLayout);
+        listView = (ListView) rootView.findViewById(R.id.listView_forecast);
+        listView.setAdapter(mForecastAdapter);
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-               Cursor item1 = (Cursor) parent.getItemAtPosition(position);
-               if(item1 != null) {
-                   String locationStr =  Utility.getPreferredLocation(getActivity());
-                   Intent intent = new Intent(getActivity(), DetailActivity.class)
-                           .setData(WeatherContract.WeatherEntry
-                                   .buildWeatherLocationWithStartDate(locationStr,
-                                           item1.getLong(WeatherConstants.COL_WEATHER_DATE)));
-//                   intent.putExtra(Constants.WEATHER_DATA, item);
-                   startActivity(intent);
-               }
+                selectedItemPosition = position;
+                Cursor item1 = (Cursor) parent.getItemAtPosition(position);
+                if (item1 != null) {
+                    String locationStr = Utility.getPreferredLocation(getActivity());
+                    Uri data = WeatherContract.WeatherEntry
+                            .buildWeatherLocationWithStartDate(locationStr,
+                                    item1.getLong(WeatherConstants.COL_WEATHER_DATE));
+                    callback.onItemSelected(data);
+                    mPosition = position;
+                }
             }
         });
+
+        selectedItemPosition = savedInstanceState == null || !savedInstanceState.containsKey(SELECTED_ITEM_POSITION) ? ListView.INVALID_POSITION : savedInstanceState.getInt(SELECTED_ITEM_POSITION);
         return rootView;
     }
 
@@ -118,6 +135,9 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
     @Override
     public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
         mForecastAdapter.swapCursor(data);
+        if(selectedItemPosition  != ListView.INVALID_POSITION) {
+            listView.smoothScrollToPosition(selectedItemPosition);
+        }
     }
 
     @Override
@@ -130,4 +150,32 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
         getLoaderManager().restartLoader(LOADER_ID, null, this);
     }
 
+    public void setUseTodayLayout(boolean useTodayLayout) {
+        mUseTodayLayout = useTodayLayout;
+
+        if(mForecastAdapter != null){
+            mForecastAdapter.setUseTodayLayout(mUseTodayLayout);
+        }
+    }
+
+
+    /**
+     * A callback interface that all activities containing this fragment must
+     * implement. This mechanism allows activities to be notified of item
+     * selections.
+     */
+    public interface Callback {
+        /**
+         * DetailFragmentCallback for when an item has been selected.
+         */
+        public void onItemSelected(Uri dateUri);
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        if(selectedItemPosition != ListView.INVALID_POSITION){
+            outState.putInt(SELECTED_ITEM_POSITION, selectedItemPosition);
+        }
+        super.onSaveInstanceState(outState);
+    }
 }
